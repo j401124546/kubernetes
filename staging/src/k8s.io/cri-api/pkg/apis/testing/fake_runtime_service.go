@@ -376,6 +376,10 @@ func (r *FakeRuntimeService) CreateContainer(podSandboxID string, config *runtim
 	return containerID, nil
 }
 
+func (r *FakeRuntimeService) CheckpointContainer(containerID string, options *runtimeapi.CheckpointContainerOptions) error {
+	return nil
+}
+
 // StartContainer emulates start of a container in the FakeRuntimeService.
 func (r *FakeRuntimeService) StartContainer(containerID string) error {
 	r.Lock()

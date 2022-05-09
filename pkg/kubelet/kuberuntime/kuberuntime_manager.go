@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	goruntime "runtime"
+	"sync"
 	"time"
 
 	cadvisorapi "github.com/google/cadvisor/info/v1"
@@ -860,6 +861,26 @@ func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontaine
 		start("container", containerStartSpec(&pod.Spec.Containers[idx]))
 	}
 
+	return
+}
+
+func (m *kubeGenericRuntimeManager) CheckpointPod(pod *v1.Pod, podStatus *kubecontainer.PodStatus, options *kubecontainer.CheckpointPodOptions) {
+	klog.V(2).Info("Checkpointing Pod %v, Options: %v", pod.Name, options)
+	wg := sync.WaitGroup{}
+	for _, c := range options.Containers {
+		for _, container := range pod.Spec.Containers {
+			if container.Name == c {
+				wg.Add(1)
+				go func() {
+					m.checkpointContainer(&container, podStatus, options)
+					wg.Done()
+				}()
+				break
+			}
+		}
+	}
+	wg.Wait()
+	options.Done <- struct{}{}
 	return
 }
 

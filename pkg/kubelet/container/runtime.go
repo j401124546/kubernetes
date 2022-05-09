@@ -97,6 +97,8 @@ type Runtime interface {
 	GarbageCollect(gcPolicy GCPolicy, allSourcesReady bool, evictNonDeletedPods bool) error
 	// Syncs the running pod into the desired pod.
 	SyncPod(pod *v1.Pod, podStatus *PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) PodSyncResult
+	// CheckpointPod checkpoint a running pod
+	CheckpointPod(pod *v1.Pod, podStatus *PodStatus, options *CheckpointPodOptions)
 	// KillPod kills all the containers of a pod. Pod may be nil, running pod must not be.
 	// TODO(random-liu): Return PodSyncResult in KillPod.
 	// gracePeriodOverride if specified allows the caller to override the pod default grace period.
@@ -375,6 +377,14 @@ type Image struct {
 type EnvVar struct {
 	Name  string
 	Value string
+}
+
+type CheckpointPodOptions struct {
+	KeepRunning    bool
+	Containers     []string
+	CheckpointsDir string
+	Done           chan <- struct{}
+	Unblock        <-chan struct{}
 }
 
 // Annotation represents an annotation.

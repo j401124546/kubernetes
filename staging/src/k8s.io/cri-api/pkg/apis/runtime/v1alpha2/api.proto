@@ -61,6 +61,8 @@ service RuntimeService {
 
     // CreateContainer creates a new container in specified PodSandbox
     rpc CreateContainer(CreateContainerRequest) returns (CreateContainerResponse) {}
+    // CheckpointContainer checkpoint a running container in specified path
+    rpc CheckpointContainer(CheckpointContainerRequest) returns (CheckpointContainerResponse) {}
     // StartContainer starts the container.
     rpc StartContainer(StartContainerRequest) returns (StartContainerResponse) {}
     // StopContainer stops a running container with a grace period (i.e., timeout).
@@ -834,6 +836,22 @@ message CreateContainerResponse {
     string container_id = 1;
 }
 
+message CheckpointContainerRequest {
+    // ID of the container to be checkpointed
+    string container_id = 1;
+    // Options of the checkpoint container request
+    CheckpointContainerOptions options = 2;
+}
+
+message CheckpointContainerOptions {
+    // Path of the checkpoint file to store
+    string checkpoint_path = 1;
+    // Whether to leave container running
+    bool leave_running = 2;
+}
+
+message CheckpointContainerResponse {}
+
 message StartContainerRequest {
     // ID of the container to start.
     string container_id = 1;
@@ -984,10 +1002,10 @@ message UpdateContainerResourcesRequest {
     string container_id = 1;
     // Resource configuration specific to Linux containers.
     LinuxContainerResources linux = 2;
-    // Resource configuration specific to Windows containers. 
+    // Resource configuration specific to Windows containers.
     WindowsContainerResources windows = 3;
-    // Unstructured key-value map holding arbitrary additional information for 
-    // container resources updating. This can be used for specifying experimental 
+    // Unstructured key-value map holding arbitrary additional information for
+    // container resources updating. This can be used for specifying experimental
     // resources to update or other options to use when updating the container.
     map<string, string> annotations = 4;
 }

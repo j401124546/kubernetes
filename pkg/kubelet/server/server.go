@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"k8s.io/kubernetes/pkg/kubelet/checkpoint"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -144,9 +145,10 @@ func ListenAndServeKubeletServer(
 	enableCAdvisorJSONEndpoints,
 	enableDebuggingHandlers,
 	enableContentionProfiling,
-	enableSystemLogHandler bool) {
+	enableSystemLogHandler bool,
+	checkpointManager checkpoint.Manager) {
 	klog.Infof("Starting to listen on %s:%d", address, port)
-	handler := NewServer(host, resourceAnalyzer, auth, enableCAdvisorJSONEndpoints, enableDebuggingHandlers, enableContentionProfiling, enableSystemLogHandler)
+	handler := NewServer(host, resourceAnalyzer, auth, enableCAdvisorJSONEndpoints, enableDebuggingHandlers, enableContentionProfiling, enableSystemLogHandler, checkpointManager)
 	s := &http.Server{
 		Addr:           net.JoinHostPort(address.String(), strconv.FormatUint(uint64(port), 10)),
 		Handler:        &handler,
@@ -169,7 +171,7 @@ func ListenAndServeKubeletServer(
 // ListenAndServeKubeletReadOnlyServer initializes a server to respond to HTTP network requests on the Kubelet.
 func ListenAndServeKubeletReadOnlyServer(host HostInterface, resourceAnalyzer stats.ResourceAnalyzer, address net.IP, port uint, enableCAdvisorJSONEndpoints bool) {
 	klog.V(1).Infof("Starting to listen read-only on %s:%d", address, port)
-	s := NewServer(host, resourceAnalyzer, nil, enableCAdvisorJSONEndpoints, false, false, false)
+	s := NewServer(host, resourceAnalyzer, nil, enableCAdvisorJSONEndpoints, false, false, false, nil)
 
 	server := &http.Server{
 		Addr:           net.JoinHostPort(address.String(), strconv.FormatUint(uint64(port), 10)),
@@ -227,7 +229,8 @@ func NewServer(
 	enableCAdvisorJSONEndpoints,
 	enableDebuggingHandlers,
 	enableContentionProfiling,
-	enableSystemLogHandler bool) Server {
+	enableSystemLogHandler bool,
+	checkpointManager checkpoint.Manager) Server {
 	server := Server{
 		host:                 host,
 		resourceAnalyzer:     resourceAnalyzer,
@@ -239,7 +242,7 @@ func NewServer(
 	if auth != nil {
 		server.InstallAuthFilter()
 	}
-	server.InstallDefaultHandlers(enableCAdvisorJSONEndpoints)
+	server.InstallDefaultHandlers(enableCAdvisorJSONEndpoints, checkpointManager)
 	if enableDebuggingHandlers {
 		server.InstallDebuggingHandlers()
 		// To maintain backward compatibility serve logs only when enableDebuggingHandlers is also enabled
@@ -317,7 +320,7 @@ func (s *Server) getMetricMethodBucket(method string) string {
 
 // InstallDefaultHandlers registers the default set of supported HTTP request
 // patterns with the restful Container.
-func (s *Server) InstallDefaultHandlers(enableCAdvisorJSONEndpoints bool) {
+func (s *Server) InstallDefaultHandlers(enableCAdvisorJSONEndpoints bool, checkpointManager checkpoint.Manager) {
 	s.addMetricsBucketMatcher("healthz")
 	healthz.InstallHandler(s.restfulCont,
 		healthz.PingHealthz,
@@ -333,6 +336,12 @@ func (s *Server) InstallDefaultHandlers(enableCAdvisorJSONEndpoints bool) {
 	ws.Route(ws.GET("").
 		To(s.getPods).
 		Operation("getPods"))
+	s.restfulCont.Add(ws)
+
+	s.addMetricsBucketMatcher("checkpoint")
+	ws = &restful.WebService{}
+	ws.Path("/checkpoint").Produces(restful.MIME_JSON)
+	ws.Route(ws.GET("/{podUID}").To(checkpointManager.HandleCheckpointRequest).Operation("checkpointPod"))
 	s.restfulCont.Add(ws)
 
 	s.addMetricsBucketMatcher("stats")

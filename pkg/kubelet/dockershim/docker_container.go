@@ -302,6 +302,11 @@ func (ds *dockerService) StartContainer(_ context.Context, r *runtimeapi.StartCo
 	return &runtimeapi.StartContainerResponse{}, nil
 }
 
+func (ds *dockerService) CheckpointContainer(ctx context.Context, request *runtimeapi.CheckpointContainerRequest) (*runtimeapi.CheckpointContainerResponse, error) {
+	//TODO(shiguojq) implement me
+	panic("implement me")
+}
+
 // StopContainer stops a running container with a grace period (i.e., timeout).
 func (ds *dockerService) StopContainer(_ context.Context, r *runtimeapi.StopContainerRequest) (*runtimeapi.StopContainerResponse, error) {
 	err := ds.client.StopContainer(r.ContainerId, time.Duration(r.Timeout)*time.Second)

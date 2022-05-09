@@ -161,6 +161,16 @@ func (f *RemoteRuntime) StartContainer(ctx context.Context, req *kubeapi.StartCo
 	return &kubeapi.StartContainerResponse{}, nil
 }
 
+// CheckpointContainer checkpoint a running container in a specified path
+func (f *RemoteRuntime) CheckpointContainer(ctx context.Context, req *kubeapi.CheckpointContainerRequest) (*kubeapi.CheckpointContainerResponse, error) {
+	err := f.RuntimeService.CheckpointContainer(req.GetContainerId())
+	if err != nil {
+		return nil, err
+	}
+
+	return &kubeapi.CheckpointContainerResponse{}, nil
+}
+
 // StopContainer stops a running container with a grace period (i.e., timeout).
 // This call is idempotent, and must not return an error if the container has
 // already been stopped.

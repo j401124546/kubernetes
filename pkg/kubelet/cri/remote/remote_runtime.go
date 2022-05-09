@@ -256,6 +256,25 @@ func (r *remoteRuntimeService) StartContainer(containerID string) error {
 	return nil
 }
 
+// CheckpointContainer checkpoint a running container in a specified path
+func (r *remoteRuntimeService) CheckpointContainer(containerID string, options *runtimeapi.CheckpointContainerOptions) error {
+	klog.V(10).Infof("[RemoteRuntimeService] CheckpointContainer (containerID=%v, timeout=%v)", containerID, r.timeout)
+	ctx, cancel := getContextWithTimeout(r.timeout)
+	defer cancel()
+
+	_, err := r.runtimeClient.CheckpointContainer(ctx, &runtimeapi.CheckpointContainerRequest{
+		ContainerId: containerID,
+		Options: options,
+	})
+	if err != nil {
+		klog.Errorf("CheckpointContainer %q from runtime service failed: %v", containerID, err)
+		return err
+	}
+	klog.V(10).Infof("[RemoteRuntimeService] CheckpointContainer Response (containerID=%v)", containerID)
+
+	return nil
+}
+
 // StopContainer stops a running container with a grace period (i.e., timeout).
 func (r *remoteRuntimeService) StopContainer(containerID string, timeout int64) error {
 	klog.V(10).Infof("[RemoteRuntimeService] StopContainer (containerID=%v, timeout=%v)", containerID, timeout)

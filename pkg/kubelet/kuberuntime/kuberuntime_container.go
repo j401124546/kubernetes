@@ -24,6 +24,7 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	goruntime "runtime"
 	"sort"
@@ -227,6 +228,28 @@ func (m *kubeGenericRuntimeManager) startContainer(podSandboxID string, podSandb
 	}
 
 	return "", nil
+}
+
+func (m *kubeGenericRuntimeManager) checkpointContainer(container *v1.Container, podStatus *kubecontainer.PodStatus, options *kubecontainer.CheckpointPodOptions) error {
+	klog.V(2).Infof("Checkpointing container %v.", container.Name)
+
+	containerStatus := podStatus.FindContainerStatusByName(container.Name)
+
+	// If a container isn't running, it can't be live-migrated.
+	if containerStatus == nil || containerStatus.State != kubecontainer.ContainerStateRunning {
+		return nil
+	}
+
+	leaveRunning := false
+	if options.KeepRunning == true {
+		leaveRunning = true
+	}
+
+	checkpointPath := path.Join(options.CheckpointsDir, container.Name)
+	return m.runtimeService.CheckpointContainer(containerStatus.ID.ID, &runtimeapi.CheckpointContainerOptions{
+		CheckpointPath: checkpointPath,
+		LeaveRunning:   leaveRunning,
+	})
 }
 
 // generateContainerConfig generates container config for kubelet runtime v1.

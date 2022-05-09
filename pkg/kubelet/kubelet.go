@@ -19,6 +19,7 @@ package kubelet
 import (
 	"crypto/tls"
 	"fmt"
+	"k8s.io/kubernetes/pkg/kubelet/checkpoint"
 	"math"
 	"net"
 	"net/http"
@@ -581,6 +582,8 @@ func NewMainKubelet(kubeCfg *kubeletconfiginternal.KubeletConfiguration,
 	mirrorPodClient := kubepod.NewBasicMirrorClient(klet.kubeClient, string(nodeName), nodeLister)
 	klet.podManager = kubepod.NewBasicPodManager(mirrorPodClient, secretManager, configMapManager)
 
+	klet.checkpointManager = checkpoint.NewManager(klet.kubeClient, klet.podManager, klet.checkpointPod, klet.rootDirectory)
+
 	klet.statusManager = status.NewManager(klet.kubeClient, klet.podManager, klet)
 
 	klet.resourceAnalyzer = serverstats.NewResourceAnalyzer(klet, kubeCfg.VolumeStatsAggPeriod.Duration)
@@ -867,6 +870,8 @@ type Kubelet struct {
 	// podManager is a facade that abstracts away the various sources of pods
 	// this Kubelet services.
 	podManager kubepod.Manager
+
+	checkpointManager checkpoint.Manager
 
 	// Needed to observe and respond to situations that could impact node stability
 	evictionManager eviction.Manager
@@ -1494,6 +1499,19 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 		return nil
 	}
 
+	if updateType == kubetypes.SyncPodCheckpoint {
+			klog.V(2).Info("Checkpoint Running Pod")
+			ck, _ := kl.checkpointManager.FindCheckpointForPod(pod)
+			kl.containerRuntime.CheckpointPod(pod, podStatus, ck.Options())
+
+			// block the sync loop of the pod until the migration is finished.
+			ck.WaitUntilFinished()
+
+			// kl.statusManager.TerminatePod(pod)
+			return nil
+
+		}
+
 	// If the pod is a static pod and its mirror pod is still gracefully terminating,
 	// we do not want to start the new static pod until the old static pod is gracefully terminated.
 	podFullName := kubecontainer.GetPodFullName(pod)
@@ -1701,6 +1719,12 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 	}
 
 	return nil
+}
+
+func (kl *Kubelet) checkpointPod(pod *v1.Pod) {
+	start := kl.clock.Now()
+	mirrorPod, _ := kl.podManager.GetMirrorPodByPod(pod)
+	kl.dispatchWork(pod, kubetypes.SyncPodCheckpoint, mirrorPod, start)
 }
 
 // Get pods which should be resynchronized. Currently, the following pod should be resynchronized:
@@ -2028,6 +2052,9 @@ func (kl *Kubelet) dispatchWork(pod *v1.Pod, syncType kubetypes.SyncPodType, mir
 			}
 		},
 	})
+
+
+
 	// Note the number of containers for new pods.
 	if syncType == kubetypes.SyncPodCreate {
 		metrics.ContainersPerPodCount.Observe(float64(len(pod.Spec.Containers)))
@@ -2218,7 +2245,7 @@ func (kl *Kubelet) ResyncInterval() time.Duration {
 
 // ListenAndServe runs the kubelet HTTP server.
 func (kl *Kubelet) ListenAndServe(address net.IP, port uint, tlsOptions *server.TLSOptions, auth server.AuthInterface, enableCAdvisorJSONEndpoints, enableDebuggingHandlers, enableContentionProfiling, enableSystemLogHandler bool) {
-	server.ListenAndServeKubeletServer(kl, kl.resourceAnalyzer, address, port, tlsOptions, auth, enableCAdvisorJSONEndpoints, enableDebuggingHandlers, enableContentionProfiling, enableSystemLogHandler)
+	server.ListenAndServeKubeletServer(kl, kl.resourceAnalyzer, address, port, tlsOptions, auth, enableCAdvisorJSONEndpoints, enableDebuggingHandlers, enableContentionProfiling, enableSystemLogHandler, kl.checkpointManager)
 }
 
 // ListenAndServeReadOnly runs the kubelet HTTP server in read-only mode.
